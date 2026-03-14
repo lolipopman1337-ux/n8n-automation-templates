@@ -1,0 +1,85 @@
+{
+  "name": "Daily Bot Monitor",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 9 * * *"
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger-1",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "YOUR_N8N_BASE_URL/api/v1/workflows",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "http-request-1",
+      "name": "Get All Workflows",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [450, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "YOUR_N8N_API_CREDENTIAL_ID",
+          "name": "N8n API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const workflows = $input.first().json.data || [];\nconst active = workflows.filter(w => w.active === true);\nconst inactive = workflows.filter(w => w.active === false);\nconst lines = [\n  '*Daily Bot Monitor Report*',\n  new Date().toISOString().split('T')[0],\n  '',\n  'Active: ' + active.length,\n  ...active.map(w => '  - ' + w.name),\n  '',\n  'Inactive: ' + inactive.length,\n  ...inactive.map(w => '  - ' + w.name),\n  '',\n  'Total: ' + workflows.length\n];\nreturn [{ json: { report: lines.join('\\n') } }];"
+      },
+      "id": "code-filter-1",
+      "name": "Build Status Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "chatId": "YOUR_TELEGRAM_CHAT_ID",
+        "text": "={{ $json.report }}",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "telegram-send-1",
+      "name": "Send Telegram Report",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [850, 300],
+      "credentials": {
+        "telegramApi": {
+          "id": "YOUR_TELEGRAM_CREDENTIAL_ID",
+          "name": "Telegram Bot"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [[{ "node": "Get All Workflows", "type": "main", "index": 0 }]]
+    },
+    "Get All Workflows": {
+      "main": [[{ "node": "Build Status Report", "type": "main", "index": 0 }]]
+    },
+    "Build Status Report": {
+      "main": [[{ "node": "Send Telegram Report", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "meta": { "templateCredsSetupCompleted": false }
+}
