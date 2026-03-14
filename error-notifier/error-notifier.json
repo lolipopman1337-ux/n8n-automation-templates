@@ -1,0 +1,50 @@
+{
+  "name": "Error Notifier",
+  "nodes": [
+    {
+      "id": "error-trigger-001",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "parameters": {}
+    },
+    {
+      "id": "format-msg-001",
+      "name": "Format Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 300],
+      "parameters": {
+        "jsCode": "const err = $input.first().json;\nconst wfName = err.workflow?.name || 'Unknown';\nconst wfId = err.workflow?.id || '';\nconst execId = err.execution?.id || '';\nconst errorMsg = err.execution?.error?.message || 'Unknown error';\nconst nodeName = err.execution?.error?.node?.name || err.execution?.lastNodeExecuted || 'Unknown';\nconst execUrl = `YOUR_N8N_URL/workflow/${wfId}/executions/${execId}`;\nconst text = `Error: ${wfName}\\n\\nNode: ${nodeName}\\n${errorMsg.slice(0,300)}\\n\\nExecution: ${execUrl}`;\nreturn [{ json: { text } }];"
+      }
+    },
+    {
+      "id": "send-alert-001",
+      "name": "Send Alert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [710, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.telegram.org/botYOUR_BOT_TOKEN/sendMessage",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "keypair",
+        "bodyParameters": {
+          "parameters": [
+            {"name": "chat_id", "value": "YOUR_CHAT_ID"},
+            {"name": "text", "value": "={{ $json.text }}"},
+            {"name": "parse_mode", "value": "Markdown"}
+          ]
+        },
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Error Trigger": {"main": [[{"node": "Format Message", "type": "main", "index": 0}]]},
+    "Format Message": {"main": [[{"node": "Send Alert", "type": "main", "index": 0}]]}
+  },
+  "settings": {"executionOrder": "v1"}
+}
