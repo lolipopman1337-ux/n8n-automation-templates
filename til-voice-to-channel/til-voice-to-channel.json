@@ -1,0 +1,293 @@
+{
+  "name": "📝 TIL Voice → Channel",
+  "nodes": [
+    {
+      "id": "til-tg-trigger",
+      "name": "Telegram Trigger",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        240,
+        300
+      ],
+      "parameters": {
+        "updates": [
+          "message"
+        ]
+      },
+      "credentials": {
+        "telegramApi": {
+          "id": "YOUR_TELEGRAM_CREDENTIAL_ID",
+          "name": "Your Telegram Bot"
+        }
+      }
+    },
+    {
+      "id": "til-is-voice",
+      "name": "Is Voice?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        460,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "conditions": [
+            {
+              "id": "cond-voice",
+              "leftValue": "={{ $json.message.voice ? 'yes' : 'no' }}",
+              "rightValue": "yes",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "til-get-file",
+      "name": "Get File",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        680,
+        200
+      ],
+      "parameters": {
+        "operation": "getFile",
+        "fileId": "={{ $json.message.voice.file_id }}"
+      },
+      "credentials": {
+        "telegramApi": {
+          "id": "YOUR_TELEGRAM_CREDENTIAL_ID",
+          "name": "Your Telegram Bot"
+        }
+      }
+    },
+    {
+      "id": "til-download",
+      "name": "Download Audio",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        900,
+        200
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.telegram.org/file/botYOUR_BOT_TOKEN/{{ $json.file_path }}",
+        "responseFormat": "file"
+      }
+    },
+    {
+      "id": "til-whisper",
+      "name": "Whisper → Text",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1120,
+        200
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/audio/transcriptions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_OPENAI_API_KEY"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "model",
+              "value": "whisper-1"
+            },
+            {
+              "name": "language",
+              "value": "ru"
+            },
+            {
+              "parameterType": "formBinaryData",
+              "name": "file",
+              "inputDataFieldName": "data"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "til-gpt",
+      "name": "GPT → TIL Post",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1340,
+        200
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_OPENAI_API_KEY"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'gpt-4o', messages: [{ role: 'system', content: 'Format the voice note as a short TIL post for Telegram: 2-4 sentences, emoji at start, 2-3 hashtags at end.' }, { role: 'user', content: $json.text }], max_tokens: 300 }) }}"
+      }
+    },
+    {
+      "id": "til-post",
+      "name": "Post to Channel",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1560,
+        200
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.telegram.org/botYOUR_BOT_TOKEN/sendMessage",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ chat_id: YOUR_CHANNEL_ID, text: $json.choices[0].message.content, parse_mode: 'Markdown' }) }}"
+      }
+    },
+    {
+      "id": "til-confirm",
+      "name": "Confirm",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1780,
+        200
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.telegram.org/botYOUR_BOT_TOKEN/sendMessage",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ chat_id: $('Telegram Trigger').first().json.message.from.id, text: '✅ Posted!' }) }}"
+      }
+    },
+    {
+      "id": "til-ignore",
+      "name": "Ignore",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        680,
+        400
+      ],
+      "parameters": {}
+    }
+  ],
+  "connections": {
+    "Telegram Trigger": {
+      "main": [
+        [
+          {
+            "node": "Is Voice?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Voice?": {
+      "main": [
+        [
+          {
+            "node": "Get File",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Ignore",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get File": {
+      "main": [
+        [
+          {
+            "node": "Download Audio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download Audio": {
+      "main": [
+        [
+          {
+            "node": "Whisper → Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Whisper → Text": {
+      "main": [
+        [
+          {
+            "node": "GPT → TIL Post",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GPT → TIL Post": {
+      "main": [
+        [
+          {
+            "node": "Post to Channel",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post to Channel": {
+      "main": [
+        [
+          {
+            "node": "Confirm",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
