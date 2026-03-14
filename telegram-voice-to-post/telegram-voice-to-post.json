@@ -1,0 +1,145 @@
+{
+  "name": "Telegram Voice to Post",
+  "nodes": [
+    {
+      "parameters": {
+        "updates": ["message"],
+        "additionalFields": {}
+      },
+      "id": "telegram-trigger-1",
+      "name": "Telegram Trigger",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.1,
+      "position": [250, 300],
+      "webhookId": "YOUR_WEBHOOK_ID",
+      "credentials": {
+        "telegramApi": {
+          "id": "YOUR_TELEGRAM_CREDENTIAL_ID",
+          "name": "Telegram Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "getFile",
+        "fileId": "={{ $json.message.voice.file_id }}"
+      },
+      "id": "telegram-getfile-1",
+      "name": "Get Voice File",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [450, 300],
+      "credentials": {
+        "telegramApi": {
+          "id": "YOUR_TELEGRAM_CREDENTIAL_ID",
+          "name": "Telegram Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.telegram.org/file/botYOUR_BOT_TOKEN/{{ $json.result.file_path }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
+      },
+      "id": "http-download-1",
+      "name": "Download Voice File",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/audio/transcriptions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "Bearer YOUR_OPENAI_KEY" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            { "parameterType": "formBinaryData", "name": "file", "inputDataFieldName": "data" },
+            { "name": "model", "value": "whisper-1" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "whisper-transcribe-1",
+      "name": "Whisper Transcription",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "Bearer YOUR_OPENAI_KEY" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={ \"model\": \"gpt-4o\", \"messages\": [{ \"role\": \"system\", \"content\": \"Format the voice transcription into an engaging Telegram channel post. Keep author tone. Add relevant emoji. Max 300 words.\" }, { \"role\": \"user\", \"content\": {{ JSON.stringify($json.text) }} }], \"max_tokens\": 500 }",
+        "options": {}
+      },
+      "id": "gpt4o-format-1",
+      "name": "GPT-4o Format Post",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1050, 300]
+    },
+    {
+      "parameters": {
+        "chatId": "YOUR_CHANNEL_ID",
+        "text": "={{ $json.choices[0].message.content }}",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "telegram-send-channel-1",
+      "name": "Send to Channel",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1250, 300],
+      "credentials": {
+        "telegramApi": {
+          "id": "YOUR_TELEGRAM_CREDENTIAL_ID",
+          "name": "Telegram Bot"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Telegram Trigger": {
+      "main": [[{ "node": "Get Voice File", "type": "main", "index": 0 }]]
+    },
+    "Get Voice File": {
+      "main": [[{ "node": "Download Voice File", "type": "main", "index": 0 }]]
+    },
+    "Download Voice File": {
+      "main": [[{ "node": "Whisper Transcription", "type": "main", "index": 0 }]]
+    },
+    "Whisper Transcription": {
+      "main": [[{ "node": "GPT-4o Format Post", "type": "main", "index": 0 }]]
+    },
+    "GPT-4o Format Post": {
+      "main": [[{ "node": "Send to Channel", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "meta": { "templateCredsSetupCompleted": false }
+}
